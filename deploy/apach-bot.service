@@ -1,0 +1,41 @@
+[Unit]
+Description=Apach Game Control Discord Bot
+Documentation=https://discord.js.org
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=apachbot
+Group=apachbot
+WorkingDirectory=/opt/apach-bot
+
+# systemd injecte directement les variables du fichier .env.
+# Format KEY=VALUE, compatible avec dotenv et EnvironmentFile.
+EnvironmentFile=/opt/apach-bot/.apach/.env
+
+ExecStart=/usr/bin/node /opt/apach-bot/apach-bot.js --non-interactive
+
+Restart=on-failure
+RestartSec=5s
+
+# Logs vers journald (les .log fichier sont écrits en parallèle par logger.js)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=apach-bot
+
+# Durcissement
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+# Préfixe "-" : systemd tolère l'absence du chemin au chargement (premier boot).
+ReadWritePaths=-/opt/apach-bot/.apach -/opt/apach-bot/logs
+
+[Install]
+WantedBy=multi-user.target
