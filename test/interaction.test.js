@@ -38,7 +38,70 @@ test("errorText: affiche le code renvoyé par l'API", () => {
   assert.match(errorText(err, "other"), /FORBIDDEN/);
 });
 
-test("errorText: message neutre sans status ni code", () => {
+test("errorText: message neutre avec le message réel de l'erreur", () => {
   const out = errorText(new Error("boom"), "other");
-  assert.match(out, /Request failed\. Check your API key/);
+  assert.match(out, /Request failed\. boom/);
+  assert.doesNotMatch(out, /API key/, "on n'accuse plus la clé API à tort");
+});
+
+test("errorText: 401 → message dédié clé API", () => {
+  const err = new Error("err");
+  err.response = {status: 401};
+  const out = errorText(err, "other");
+  assert.match(out, /Authentication failed/);
+  assert.match(out, /API key/);
+});
+
+test("errorText: 404 → message dédié ID de service", () => {
+  const err = new Error("err");
+  err.response = {status: 404};
+  const out = errorText(err, "other");
+  assert.match(out, /Target not found/);
+  assert.match(out, /service ID/);
+});
+
+test("errorText: 429 → message dédié rate limit", () => {
+  const err = new Error("err");
+  err.response = {status: 429};
+  assert.match(errorText(err, "other"), /Rate limited/);
+});
+
+test("errorText: 5xx sans transmission → rien n'a été envoyé", () => {
+  const err = new Error("err");
+  err.response = {status: 502};
+  assert.match(errorText(err, "other"), /Nothing was sent/);
+});
+
+test("errorText: 5xx après transmission → action peut avoir été appliquée", () => {
+  const err = new Error("err");
+  err.response = {status: 500};
+  err._powerSent = true;
+  const out = errorText(err, "power");
+  assert.match(out, /may have been applied/);
+  assert.match(out, /No automatic retry/);
+});
+
+test("errorText: timeout sans transmission → rien n'a été envoyé", () => {
+  const err = new Error("err");
+  err.code = "ECONNABORTED";
+  const out = errorText(err, "power");
+  assert.match(out, /Nothing was sent/);
+  assert.match(out, /No automatic retry/);
+});
+
+test("errorText: timeout après transmission → action peut avoir été appliquée", () => {
+  const err = new Error("err");
+  err.code = "ETIMEDOUT";
+  err._powerSent = true;
+  const out = errorText(err, "power");
+  assert.match(out, /may have been applied/);
+  assert.doesNotMatch(out, /API key/);
+});
+
+test("errorText: erreur réseau → message connectivité", () => {
+  const err = new Error("err");
+  err.code = "ECONNREFUSED";
+  const out = errorText(err, "other");
+  assert.match(out, /network/);
+  assert.doesNotMatch(out, /API key/);
 });

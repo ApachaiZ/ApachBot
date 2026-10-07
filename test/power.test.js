@@ -103,6 +103,7 @@ const hasMockTimers = typeof mock?.timers?.enable === "function";
 let rawState = "online"; // état constant utilisé quand rawQueue est absente
 let rawQueue = null;     // file optionnelle de réponses brutes (une par appel)
 let onPower = null;      // effet de bord optionnel de sendPowerRaw
+let failPower = null;    // si posé, sendPowerRaw lève cette erreur (timeout, 5xx…)
 let powerCalls = [];     // journal {id, action} des appels power
 
 const originalFetchRaw = yh.fetchRaw;
@@ -119,6 +120,11 @@ function installProviderMocks() {
   yh.fetchRaw = async () => sample();
   yh.sendPowerRaw = async (client, id, action) => {
     powerCalls.push({id, action});
+    if (failPower) {
+      const e = new Error(failPower.message || "send failed");
+      if (failPower.code) e.code = failPower.code;
+      throw e;
+    }
     if (onPower) onPower(action);
   };
 }
@@ -136,6 +142,7 @@ function resetState() {
   rawState = "online";
   rawQueue = null;
   onPower = null;
+  failPower = null;
   powerCalls = [];
   confirmResult = true;
   confirmCalls = 0;
@@ -342,7 +349,58 @@ test("power: timeout sans confirmation d'état (10 minutes virtuelles)", {skip: 
     const e = lastEmbed(m);
     assert.equal(e.title, t("power.notConfirmed").title);
     assert.match(e.description, /10 minutes/);
-    assert.match(e.description, /\*\*stopped\*\*/, "dernier état connu (normalisé)");
+    assert.equal(loadPersistedLock().default, undefined, "verrou nettoyé");
+  } finally {
+    mock.timers.reset();
+    clearLock("default");
+    uninstallProviderMocks();
+  }
+});
+
+// ── Échec de transmission : l'action a pu être exécutée côté provider ──
+test("power: sendPower en erreur mais état cible vérifié → carte « appliedDespiteError », pas d'erreur", async () => {
+  resetState();
+  installProviderMocks();
+  failPower = {message: "timeout", code: "ECONNABORTED"};
+  // before : online → le POST « échoue » (timeout) → vérification : offline (stop atteint).
+  rawQueue = [
+    {state: "online", uptimeSeconds: 10000},
+    {state: "offline", uptimeSeconds: 0},
+  ];
+  try {
+    const m = makeInteraction("999");
+    await power(m.interaction, "stop", undefined);
+    assert.deepEqual(powerCalls, [{id: SERVICE_ID, action: "stop"}], "un seul POST, aucun retry");
+    assert.equal(m.captures.length, 1, "une seule carte (appliedDespiteError)");
+    const e = lastEmbed(m);
+    assert.equal(e.title, t("power.appliedDespiteError").title);
+    assert.match(e.description, /\*\*stopped\*\*/);
+    assert.match(e.description, new RegExp(cfg.provider_label), "provider cité");
+    assert.match(e.description, /No new power request was sent/);
+    assert.equal(loadPersistedLock().default, undefined, "verrou nettoyé");
+  } finally {
+    clearLock("default");
+    uninstallProviderMocks();
+  }
+});
+
+test("power: sendPower en erreur et état jamais atteint → erreur relancée avec _powerSent", {skip: !hasMockTimers}, async () => {
+  resetState();
+  installProviderMocks();
+  failPower = {message: "timeout", code: "ECONNABORTED"};
+  rawState = "online"; // reste online : « stop » n'atteindra jamais offline
+  mock.timers.enable({apis: ["setTimeout"]});
+  try {
+    const m = makeInteraction("999");
+    let caught = null;
+    const p = power(m.interaction, "stop", undefined).catch((e) => { caught = e; });
+    // 3 tentatives de vérification : immédiate + 2 × 5 s = 10 s virtuelles.
+    await drive(p, {stepMs: 5000, maxTicks: 60});
+    assert.ok(caught, "power doit relancer l'erreur");
+    assert.equal(caught._powerSent, true, "marqueur _powerSent posé pour errorText");
+    assert.equal(caught.code, "ECONNABORTED");
+    assert.equal(m.captures.length, 0, "aucune carte envoyée par power (l'affichage est géré par interaction)");
+    assert.deepEqual(powerCalls, [{id: SERVICE_ID, action: "stop"}], "un seul POST, aucun retry");
     assert.equal(loadPersistedLock().default, undefined, "verrou nettoyé");
   } finally {
     mock.timers.reset();

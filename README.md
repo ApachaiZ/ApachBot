@@ -630,6 +630,29 @@ configurée, ou `DISCORD_CLIENT_ID` ne correspond pas au token.
 </details>
 
 <details>
+<summary><b>❌ Les commandes apparaissent en double dans l'autocomplétion Discord</b></summary>
+
+Deux copies coexistent : une **globale** (application) et une **de guilde**. Le bot enregistre
+uniquement les commandes de guilde et **purge les commandes globales à chaque démarrage** :
+redémarrez le bot, les doublons disparaissent.
+👉 Si les doublons persistent après un redémarrage, ils proviennent d'une **autre application Discord**
+(un ancien `DISCORD_CLIENT_ID`) : retirez le bot du serveur et réinvitez-le avec la bonne application,
+ou supprimez l'ancienne application dans le portail développeur.
+
+</details>
+
+<details>
+<summary><b>⚠️ La commande échoue côté bot alors que l'action est passée côté serveur</b></summary>
+
+Le bot vérifie désormais l'**état réel** du serveur après une erreur de transmission : si l'action a été
+appliquée (timeout après exécution, erreur 5xx tardive…), il confirme le succès au lieu d'afficher une
+erreur. Les messages d'erreur indiquent la vraie cause : 401 (clé API), 403 (scopes), 404 (ID de
+service), 429 (rate limit), 5xx, timeout ou problème réseau.
+👉 En cas de doute, consultez `/status` : le bot n'envoie **jamais** de seconde requête power après une erreur.
+
+</details>
+
+<details>
 <summary><b>❌ <code>/users add</code> → "Invalid selection"</b></summary>
 
 Le membre sélectionné est un bot, l'owner, ou n'est plus présent sur le serveur.
