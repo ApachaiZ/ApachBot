@@ -1,0 +1,18 @@
+.aider*
+.apach/.env
+node_modules/
+.apach/active.lock
+.apach/active.lock.tmp
+.apach/commands.hash
+.apach/members.state.json
+.apach/members.roster.json
+.apach/stats.json
+.apach/sessions.json
+.apach/sessions.json.tmp
+.apach/users.json
+.apach/users.json.tmp
+.codewhale
+# Legacy location (pre-.apach/ migration) — kept defensively.
+apach-users.json
+*.log
+logs/
